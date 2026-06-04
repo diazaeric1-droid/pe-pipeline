@@ -3,9 +3,8 @@ title: PE Pipeline — detect, predict, authorize
 emoji: 🛢️
 colorFrom: blue
 colorTo: gray
-sdk: streamlit
-sdk_version: 1.50.0
-app_file: app.py
+sdk: docker
+app_port: 7860
 pinned: true
 license: mit
 ---
