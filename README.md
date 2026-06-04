@@ -1,4 +1,19 @@
+---
+title: PE Pipeline — detect, predict, authorize
+emoji: 🛢️
+colorFrom: blue
+colorTo: gray
+sdk: streamlit
+sdk_version: 1.50.0
+app_file: app.py
+pinned: true
+license: mit
+---
+
 # PE Pipeline — detect → predict → authorize
+
+> The YAML block above is config for **Hugging Face Spaces** (genuinely public, no
+> login wall); GitHub just renders it as a small table. See "Deploy" below.
 
 One screen, three agents, one well. A SCADA anomaly becomes an ML failure-risk score
 becomes a priced, governance-routed capital authorization — the **same physical well**
@@ -41,12 +56,23 @@ python3 pe_chain.py --llm      # Claude-drafted AFE narrative
 real deployment uses). It expects the three apps as sibling repos of this one; override
 with `APPS_ROOT=/path/to/apps`.
 
-## Deploy to Streamlit Community Cloud
+## Deploy
 
-1. share.streamlit.io → **New app** → point it at this repo, main file `app.py`, branch `main`.
-2. Deploy. That's it — it's a single self-contained repo (no submodule settings to toggle).
-   `requirements.txt` is the union of the three apps' deps + the UI; first load trains the
-   ESP model (~30s).
+**Hugging Face Spaces (recommended — genuinely public, no login wall):**
+1. huggingface.co → **New Space** → SDK **Streamlit**, hardware **CPU basic** (free).
+2. Push this repo to the Space's git remote (the Space reads the YAML config at the top
+   of this README + `requirements.txt`; `app_file` is `app.py`):
+   ```bash
+   git remote add hf https://huggingface.co/spaces/<user>/pe-pipeline
+   git push hf main
+   ```
+3. It builds and serves at `https://<user>-pe-pipeline.hf.space` with **no sign-in**.
+   First load trains the ESP model (~30s).
+
+**Streamlit Community Cloud:** works the same (single self-contained repo, no submodule
+settings), but note that some accounts now force **viewer sign-in** even on "public"
+apps — if your `share.streamlit.io` app redirects visitors to `/-/auth/app`, that's the
+gate, and Hugging Face Spaces avoids it.
 
 No secrets required — the chain is deterministic. (Add `ANTHROPIC_API_KEY` only if you
 extend the AFE stage to use the Claude drafter.)
