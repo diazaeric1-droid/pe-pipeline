@@ -8,8 +8,9 @@ no per-app virtualenvs — which is what makes a single Streamlit page possible.
 
 The CLI orchestrator (``pe_chain.py``) is the alternative for when the three apps are
 checked out as independent repos each with its own venv; this module is for the
-single-environment (Streamlit Cloud) deployment, where the apps are git submodules
-under ``apps/``.
+single-environment (Streamlit Cloud) deployment, where the apps are **vendored** as
+plain directories under ``apps/`` (mirrored from their own repos) so the deploy is a
+single self-contained clone — no submodules required.
 """
 from __future__ import annotations
 
@@ -38,8 +39,8 @@ def _load_pkg(app_dir: Path, alias: str):
     src = app_dir / "src"
     if not (src / "__init__.py").exists():
         raise FileNotFoundError(
-            f"{alias}: missing {src}/__init__.py — did the submodules get checked out? "
-            f"Run: git submodule update --init --recursive")
+            f"{alias}: missing {src}/__init__.py — the apps are vendored under apps/; "
+            f"run from the repo root (or set PE_APPS_ROOT).")
     spec = importlib.util.spec_from_file_location(
         alias, src / "__init__.py", submodule_search_locations=[str(src)])
     mod = importlib.util.module_from_spec(spec)

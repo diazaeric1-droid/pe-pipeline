@@ -23,11 +23,10 @@ try:
     import pipeline_core as pc
 except Exception as e:  # noqa: BLE001
     st.title("PE Pipeline")
-    st.error("Couldn't load the app submodules.\n\n"
+    st.error("Couldn't load the bundled apps.\n\n"
              f"```\n{type(e).__name__}: {e}\n```\n\n"
-             "This repo pulls the three PE apps in as git submodules under `apps/`. "
-             "Initialise them with:\n\n```\ngit submodule update --init --recursive\n```\n\n"
-             "On Streamlit Cloud, enable submodules in the app's advanced settings.")
+             "The three PE apps are vendored under `apps/` in this repo. Run the app from "
+             "the repo root, or set `PE_APPS_ROOT` to where the apps live.")
     st.stop()
 
 import plotly.graph_objects as go  # noqa: E402

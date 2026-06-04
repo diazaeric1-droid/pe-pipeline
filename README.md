@@ -12,24 +12,25 @@ LLM confined to narration.
     rank by deferred $)           classification)                        authority-routed AFE)
 ```
 
-The three apps live in their own repos and are pulled in here as **git submodules**
-under `apps/`. The unified Streamlit app runs the whole chain **in one process** — no
-subprocesses, no per-app virtualenvs — by loading each app's `src` package under a
-distinct alias (see `pipeline_core.py`). It runs with **zero API keys** (the AFE stage
-renders deterministically).
+The three apps are **vendored** as plain directories under `apps/` (mirrored from their
+own repos — see the links below), so this is a single self-contained repo with **no git
+submodules** (Streamlit Community Cloud doesn't reliably check those out). The unified
+Streamlit app runs the whole chain **in one process** — no subprocesses, no per-app
+virtualenvs — by loading each app's `src` package under a distinct alias (see
+`pipeline_core.py`). It runs with **zero API keys** (the AFE stage renders deterministically).
 
 ## Two ways to run it
 
 **Unified Streamlit app (single environment — what gets deployed):**
 ```bash
-git clone --recurse-submodules https://github.com/diazaeric1-droid/pe-pipeline
+git clone https://github.com/diazaeric1-droid/pe-pipeline
 cd pe-pipeline
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/streamlit run app.py
 ```
 First load regenerates the synthetic data and trains the ESP model (~30s, one time;
-data/artifacts are `.gitignore`d in the app repos). Then pick a flagged well and watch
-it flow detect → predict → authorize, ending in a downloadable AFE.
+data/artifacts are `.gitignore`d). Then pick a flagged well and watch it flow
+detect → predict → authorize, ending in a downloadable AFE.
 
 **CLI orchestrator (separate repos, each with its own venv):**
 ```bash
@@ -42,13 +43,17 @@ with `APPS_ROOT=/path/to/apps`.
 
 ## Deploy to Streamlit Community Cloud
 
-1. Point a new app at this repo, `app.py`, branch `main`.
-2. **Enable submodules** so `apps/` gets checked out (Advanced settings → "Include
-   submodules", or the app will show a clear "init submodules" message and stop).
-3. `requirements.txt` is the union of the three apps' deps + the UI.
+1. share.streamlit.io → **New app** → point it at this repo, main file `app.py`, branch `main`.
+2. Deploy. That's it — it's a single self-contained repo (no submodule settings to toggle).
+   `requirements.txt` is the union of the three apps' deps + the UI; first load trains the
+   ESP model (~30s).
 
 No secrets required — the chain is deterministic. (Add `ANTHROPIC_API_KEY` only if you
 extend the AFE stage to use the Claude drafter.)
+
+> **Keeping the vendored apps in sync:** they mirror the three repos linked below. When
+> those change, refresh with `rsync`/copy from each repo's `src/` (or re-vendor). The
+> import-alias machinery in `pipeline_core.py` is path-based, so nothing else changes.
 
 ## The handoff contract
 
@@ -61,7 +66,7 @@ Two versioned JSON artifacts keep the apps decoupled (each ignores keys it doesn
 
 See [PIPELINE.md](PIPELINE.md) for the full contract and an example run.
 
-## Apps (submodules)
+## Apps (vendored under `apps/`, mirrored from these repos)
 
 - [esp-failure-risk-agent](https://github.com/diazaeric1-droid/esp-failure-risk-agent)
 - [afe-copilot](https://github.com/diazaeric1-droid/afe-copilot)

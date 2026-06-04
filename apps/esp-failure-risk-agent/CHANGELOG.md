@@ -1,0 +1,92 @@
+# Changelog
+
+All notable changes to this project are documented here. Format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
+adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.5.0] — 2026-06-03
+
+### Added
+- **Two physically-real SCADA channels**: `drive_freq_hz` (VSD output frequency)
+  and `current_imbalance_pct` (3-phase motor current imbalance) — the first signals
+  an ESP analyst pulls up, and diagnostic of failure modes the 5-channel schema
+  couldn't express. Optional in the loader (healthy defaults backfill old exports).
+- **Two new failure modes** in the generator: **gas lock** (pump-off cycling —
+  flow crashes intermittently, runtime cycles, drive frequency ramps) and
+  **electrical / motor short** (current imbalance climbs). Five modes total.
+- **Deterministic failure-mode classifier** (`classify_failure_mode`) that grounds
+  the LLM rationale (scale · gas interference · gas lock · downthrust · electrical),
+  shown in the dashboard and digest. Detection stays deterministic; the LLM narrates.
+- **Alert-system metrics from out-of-fold predictions**: precision@k / recall@k now
+  computed across the whole fleet (was a ~3-well test slice), plus a **reliability
+  diagram** and **Brier score** in the dashboard.
+- New features: `current_imbalance_last7_mean`, `current_imbalance_max_30d`,
+  `high_imbalance_days_30d`, `drive_freq_last7_mean`, `drive_freq_slope_30d`.
+- `failure_mode` tag in `labels.csv`; model-artifact SHA-256 recorded in the registry.
+
+### Fixed
+- **Platt calibration was silently disabled on scikit-learn ≥1.6** (`cv='prefit'`
+  was removed in 1.8, raising into the guarded fallback). Now uses `FrozenEstimator`
+  with a legacy `cv='prefit'` fallback — calibration actually runs again.
+- **SHAP ↔ calibration mismatch**: `feature_contributions` decomposed the raw booster
+  while `predict_proba` returned a *separately-trained* calibrated model. The
+  calibrator now wraps the same booster Tree SHAP explains, so drivers and the shown
+  probability reconcile (verified: Spearman(raw margin, calibrated p) = 1.00).
+- **Shipped model ↔ reported metric decoupling**: both now use the same procedure;
+  metrics are OOF, and a training-time score distribution is stored for honest
+  **PSI drift** (was comparing two halves of the same live scores).
+- **Per-day slopes** use actual elapsed days, not the sample index — correct on real
+  historian data with gaps.
+- `explain_well` raises a typed `MissingAPIKey` instead of a bare `KeyError`; the
+  dashboard and ranker degrade gracefully to the deterministic diagnosis with no key.
+- Committed `artifacts/` now ship the **realistic** model (AUROC ≈ 0.85 OOF, calibrated)
+  out-of-the-box — no local retrain required, no more AUROC = 1.0 stand-in.
+- Version strings aligned to 0.5.0 (`pyproject.toml`, `__init__.py`).
+
+## [0.4.1] — 2026-06-02
+
+- Self-heal stale Streamlit bytecode cache at startup: purge `src/` `__pycache__`
+  and evict cached `src` modules so newly-added functions reload from current source
+  after a redeploy. Fixes the startup ImportError cascade seen after adding new
+  symbols to existing modules (the app no longer needs a manual Reboot to pick them up).
+
+## [0.4.0] — 2026-06-02
+
+### Added
+- **Class weighting** (`scale_pos_weight ≈ n_neg/n_pos`) + **Platt probability
+  calibration** (sigmoid `CalibratedClassifierCV`, guarded so it falls back to
+  raw probabilities on very small / single-class samples).
+- **Stratified K-fold cross-validation** reporting AUROC mean ± std — the honest
+  metric on a small, imbalanced dataset (the single held-out split is high
+  variance and no longer reported alone).
+- **Realistic synthetic data**: overlapping failure signatures (varying onset &
+  severity), sub-threshold degradation in ~25% of healthy wells, and ~5% label
+  noise — so the classes genuinely overlap and AUROC is no longer 1.0.
+- **Decision economics** (`src/economics.py`): expected-value-optimal alert
+  threshold that minimises expected fleet cost (failure cost vs. intervention
+  cost), with the resulting expected $ savings surfaced in the dashboard.
+- **Model registry + monitoring** (`src/registry.py`): versioned metric registry,
+  input-range validation of incoming features, and score-drift detection via the
+  Population Stability Index (PSI).
+- **Experimental sequence model** (`src/sequence_model.py`): a small Temporal-CNN
+  baseline-vs-sequence comparison. Opt-in only — `torch` is an optional import and
+  the module is never loaded on the deployed path.
+- `scripts/retrain.sh`: one command to regenerate realistic data and retrain the
+  class-weighted, calibrated model with K-fold metrics.
+
+### Changed
+- Corrected metric naming throughout to **top-10%** (was the ambiguous "top-10").
+- Accurate wording on calibration (Platt/sigmoid, guarded) and SHAP (XGBoost
+  `pred_contribs` / Tree SHAP values, not the full `shap` library).
+
+## [0.3.0]
+
+### Added
+- Class weighting, Platt calibration, and stratified K-fold CV groundwork in the
+  model wrapper; hardened synthetic generator (overlapping + noisy classes).
+
+## [0.2.0]
+
+### Added
+- Streamlit dashboard (`demo/app.py`): fleet ranking, per-well time series, top
+  driver contributions, and on-demand Claude explanations.
