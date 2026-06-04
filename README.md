@@ -11,6 +11,11 @@ license: mit
 
 # PE Pipeline — detect → predict → authorize
 
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://diazaeric1-pe-pipeline.hf.space)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+**Try it now → [diazaeric1-pe-pipeline.hf.space](https://diazaeric1-pe-pipeline.hf.space)** (public, no login)
+
 > The YAML block above is config for **Hugging Face Spaces** (genuinely public, no
 > login wall); GitHub just renders it as a small table. See "Deploy" below.
 
