@@ -1,19 +1,25 @@
-"""Unified Streamlit app: the suite's FLEET TRIAGE BOARD.
+"""Unified Streamlit app: the suite's FLEET TRIAGE BOARD (multipage).
 
-Two modes on one page:
+Modeled on the Daily Production Digest's ``st.navigation`` pattern — a Fleet
+Triage **overview page** (default) plus one **drill-down page per well**:
 
-  🚦 Fleet triage (default) — rank the WHOLE fleet by risked-NPV opportunity, with
-     KPI cards, a top-wells bar chart, and the detect → predict → authorize funnel as
-     a fleet summary. The front door: where do I look first?
-  🔬 Well detail — the existing per-well detect → predict → authorize flow (Daily
-     Production Digest → ESP Failure-Risk Agent → AFE Copilot) for the selected well.
+  🚦 Fleet Triage (overview, default) — rank the WHOLE fleet by risked-NPV
+     opportunity, with KPI cards, a top-wells bar chart, the ranked board table
+     (basin·formation / lift / lateral from the shared fleet registry), and the
+     detect → predict → authorize funnel as a fleet summary. The front door:
+     where do I look first?
+  🔬 Per-well pages (one per board well, "Wells" section in the sidebar) — the
+     existing per-well detect → predict → authorize flow (Daily Production Digest
+     → ESP Failure-Risk Agent → AFE Copilot) for that well, with a registry
+     metadata header and a link back to the overview.
 
-Runs all three apps' logic IN ONE PROCESS (see pipeline_core), deterministically, with
-no API key — no subprocesses or per-app virtualenvs.
+Runs all three apps' logic IN ONE PROCESS (see pipeline_core), deterministically,
+with no API key — no subprocesses or per-app virtualenvs.
 """
 from __future__ import annotations
 
 import sys
+from functools import partial
 from pathlib import Path
 
 import streamlit as st
@@ -21,12 +27,13 @@ import streamlit as st
 import theme
 import fleet_registry as fr
 
-theme.setup_page("PE Pipeline — fleet triage → well detail", icon="🛢️")
-theme.suite_nav("pipeline")
-
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
+
+# ── Shared page setup (runs every rerun, before navigation) ──────────────────
+theme.setup_page("PE Pipeline — fleet triage → well detail", icon="🛢️")
+theme.suite_nav("pipeline")
 
 # Guarded import: the three apps are vendored under apps/; if they weren't checked
 # out (e.g. a deploy without them) fail with a clear message.
@@ -43,15 +50,8 @@ except Exception as e:  # noqa: BLE001
 import pandas as pd  # noqa: E402
 import plotly.graph_objects as go  # noqa: E402
 
-theme.header("PE Pipeline",
-             subtitle="fleet triage board → drill into any well's detect → predict → authorize",
-             chips=[("orchestrator", "info"), ("fleet triage", "eval")])
-st.caption("The suite's front door: rank the WHOLE fleet by risked-NPV opportunity, then drill "
-           "into any well's three-agent flow — the Daily Production Digest flags a pump-failure "
-           "signature → the ESP Failure-Risk Agent scores 30-day risk + diagnoses the mode → the "
-           "AFE Copilot drafts the authorization. Deterministic at every hop; runs with no API key.")
 
-
+# ── First-run bootstrap: synthetic data + trained ESP model (cached) ─────────
 @st.cache_resource(show_spinner=False)
 def _bootstrap():
     msgs: list[str] = []
@@ -64,6 +64,8 @@ def _bootstrap():
 
 _bootstrap()
 
+
+# ── Sidebar economics (drives the ranking + AFE economics) ───────────────────
 with st.sidebar:
     st.header("Economics")
     price = st.number_input("Realized oil price ($/bbl)", 20.0, 150.0, 70.0, 1.0)
@@ -81,7 +83,7 @@ def _ranked(price: float, nri: float) -> pd.DataFrame:
 board_error = None
 try:
     board = _ranked(price, nri)
-    board = fr.enrich(board)  # shared Permian fleet identity (basin/area/formation/lift/hero) — additive
+    board = fr.enrich(board)  # shared Permian fleet identity (basin/area/formation/lift/lateral/hero) — additive
 except Exception as _board_exc:  # noqa: BLE001 — never let the triage front page hard-crash
     board_error = _board_exc
     board = fr.enrich(pc._empty_rank_frame())
@@ -118,12 +120,38 @@ def _alert_for(well_id: str) -> dict:
     }
 
 
-tab_triage, tab_detail = st.tabs(["🚦 Fleet triage", "🔬 Well detail"])
+def _well_ids() -> list[str]:
+    """Wells to expose as drill-down pages: the board order if available, else the
+    alert wells as a graceful fallback when the board is empty/errored."""
+    if not board.empty:
+        return board["well_id"].tolist()
+    return list(alerts_by_well)
+
+
+def _back_to_overview() -> None:
+    """Link back to the registered overview page object (set during nav wiring);
+    fall back to the entrypoint path otherwise."""
+    target = globals().get("overview")
+    try:
+        st.page_link(target if target is not None else "app.py",
+                     label="← Back to Fleet triage", icon="🚦")
+    except Exception:  # noqa: BLE001
+        pass
+
 
 # ════════════════════════════════════════════════════════════════════════════
-# MODE A — FLEET TRIAGE (default)
+# PAGE: FLEET TRIAGE (overview, default)
 # ════════════════════════════════════════════════════════════════════════════
-with tab_triage:
+
+def render_overview() -> None:
+    theme.header("PE Pipeline",
+                 subtitle="fleet triage board → drill into any well's detect → predict → authorize",
+                 chips=[("orchestrator", "info"), ("fleet triage", "eval")])
+    st.caption("The suite's front door: rank the WHOLE fleet by risked-NPV opportunity, then drill "
+               "into any well's three-agent flow — the Daily Production Digest flags a pump-failure "
+               "signature → the ESP Failure-Risk Agent scores 30-day risk + diagnoses the mode → the "
+               "AFE Copilot drafts the authorization. Deterministic at every hop; runs with no API key.")
+
     if board_error is not None:
         st.error(
             "Fleet triage couldn't be computed in this deployment. The most common cause is the "
@@ -178,6 +206,7 @@ with tab_triage:
         "Well": [f"★ {w}" if h else w for w, h in zip(show["well_id"], show["hero"])],
         "Field": show["basin"] + " · " + show["formation"],
         "Lift": show["lift"],
+        "Lateral (ft)": show["lateral_length_ft"].map(lambda x: f"{int(x):,}"),
         "30-day risk": show["failure_risk_30d"].map(lambda x: f"{x:.0%}"),
         "Deferred $/day": show["deferred_usd_per_day"].map(lambda x: f"${x:,.0f}"),
         "Addressable BOPD": show["incremental_bopd"].map(lambda x: f"{x:,.0f}"),
@@ -186,11 +215,12 @@ with tab_triage:
         "NPV basis": show["npv_basis"].str.replace("_", " "),
     })
     st.dataframe(disp, width="stretch", hide_index=True)
-    st.caption("Ranked descending by risked NPV (the opportunity score). Field / lift come from the "
-               "shared **fleet registry** — every suite app references this same onshore Permian fleet "
-               "(Midland + Delaware basins) by well ID; ★ marks a hero well with an end-to-end story. "
-               "'NPV basis' shows whether the figure came from the chain's AFE intervention economics or "
-               "the transparent deferred-$/day × 365 × risk proxy.")
+    st.caption("Ranked descending by risked NPV (the opportunity score). Field / lift / lateral come "
+               "from the shared **fleet registry** — every suite app references this same onshore Permian "
+               "fleet (Midland + Delaware basins) by well ID; ★ marks a hero well with an end-to-end "
+               "story. 'NPV basis' shows whether the figure came from the chain's AFE intervention "
+               "economics or the transparent deferred-$/day × 365 × risk proxy. Open any well from the "
+               "**Wells** section in the sidebar for its detect → predict → authorize flow.")
 
     # ── Fleet funnel — detect → predict → authorize summary (Sankey) ─────────
     st.subheader("Pipeline funnel — this run")
@@ -200,8 +230,6 @@ with tab_triage:
     _top_well = board["well_id"].iloc[0]
     _top_risk = float(board["failure_risk_30d"].iloc[0])
     _top_interv = str(board["recommended_intervention"].iloc[0]).replace("_", " ")
-    _top_alert = _alert_for(_top_well)
-    _top_usd = _deferred_usd_per_day(_top_alert)
 
     _nodes = [
         f"Fleet scanned · {_n_fleet} wells",                              # 0
@@ -227,34 +255,53 @@ with tab_triage:
     st.plotly_chart(theme.style_fig(sankey, height=240, legend=False), width="stretch")
     st.caption("Funnel for this run: the fleet narrows to ESP-related digest alerts; the highest-"
                "opportunity well is scored + diagnosed and an AFE is authorized — the detect → "
-               "predict → authorize chain. Open '🔬 Well detail' for any well's full flow.")
+               "predict → authorize chain. Open any well's page (sidebar **Wells**) for its full flow.")
 
-    # ── Drill-in selector → hands off to the Well detail tab ─────────────────
+    # ── Quick jump → switch directly to a well's drill-down page ─────────────
     st.divider()
     well_ids = board["well_id"].tolist()
-    default_idx = well_ids.index(st.session_state.get("drill_well", well_ids[0])) \
-        if st.session_state.get("drill_well") in well_ids else 0
-    st.selectbox(
-        "Drill into well →", well_ids, index=default_idx, key="drill_well",
-        help="Pick a well, then open the '🔬 Well detail' tab for its detect → predict → authorize flow.")
-    st.caption("Selection drives the '🔬 Well detail' tab.")
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        jump = st.selectbox(
+            "Jump to a well's drill-down →", well_ids,
+            help="Pick a well and open its detect → predict → authorize page.")
+    with c2:
+        st.write("")  # vertical spacer to align the button with the selectbox
+        if st.button("Open well page", type="primary", width="stretch"):
+            st.switch_page(_well_pages.get(jump, "app.py"))
+    st.caption("Each board well is also its own page under **Wells** in the sidebar.")
+
 
 # ════════════════════════════════════════════════════════════════════════════
-# MODE B — WELL DETAIL (existing detect → predict → authorize flow)
+# PAGE: PER-WELL DRILL-DOWN (detect → predict → authorize)
 # ════════════════════════════════════════════════════════════════════════════
-with tab_detail:
-    sel_well = st.session_state.get("drill_well") or (board["well_id"].iloc[0] if not board.empty else None)
-    if sel_well is None:
-        st.info("No well selected. Use the '🚦 Fleet triage' tab to pick one.")
-        st.stop()
 
-    alert = _alert_for(sel_well)
-    st.caption(f"Showing the detect → predict → authorize flow for **{sel_well}** "
-               "(change the selection on the 🚦 Fleet triage tab).")
+def render_well(well_id: str) -> None:
+    meta = fr.get(well_id)
+    flagged = well_id in alerts_by_well
+
+    theme.header(
+        f"{well_id} · {meta.name}",
+        subtitle=f"{meta.lift} · {meta.basin} · {meta.formation} · {meta.area}",
+        chips=[("well detail", "info"),
+               ("flagged" if flagged else "fleet-scan", "warn" if flagged else "info")],
+    )
+    _back_to_overview()
+
+    # Registry metadata header — lift / lateral / basin·formation at a glance.
+    mh = st.columns(4)
+    mh[0].metric("Lift", meta.lift)
+    mh[1].metric("Lateral (ft)", f"{meta.lateral_length_ft:,}")
+    mh[2].metric("Basin · formation", f"{meta.basin} · {meta.formation}")
+    mh[3].metric("Peer group", meta.peer_group)
+
+    alert = _alert_for(well_id)
+    st.caption(f"Detect → predict → authorize flow for **{well_id}**. "
+               "Economics use the sidebar price / WI / NRI.")
 
     # ── Stage 1 — Detect ─────────────────────────────────────────────────────
-    st.subheader(f"1 · Detect — Daily Production Digest · {sel_well}")
-    if sel_well in alerts_by_well:
+    st.subheader(f"1 · Detect — Daily Production Digest · {well_id}")
+    if flagged:
         st.markdown(f"**{alert['category']}** · severity **{alert['severity']}** — {alert['headline']}")
         st.metric("Deferred $/day (net)", f"${_deferred_usd_per_day(alert):,.0f}")
     else:
@@ -263,7 +310,7 @@ with tab_detail:
 
     # ── Stage 2 — Predict ────────────────────────────────────────────────────
     st.divider()
-    st.subheader(f"2 · Predict — ESP Failure-Risk Agent · {sel_well}")
+    st.subheader(f"2 · Predict — ESP Failure-Risk Agent · {well_id}")
     diag = pc.diagnose(alert)
     m1, m2, m3 = st.columns(3)
     m1.metric("30-day failure risk", f"{diag['esp_risk_score']:.0%}")
@@ -283,10 +330,29 @@ with tab_detail:
     st.subheader("3 · Authorize — AFE Copilot")
     afe_md = pc.render_afe(diag, working_interest=wi, net_revenue_interest=nri, realized_price=price)
     st.download_button("⬇ Download AFE (markdown)", afe_md,
-                       file_name=f"AFE_{sel_well}_{diag['intervention']}.md")
+                       file_name=f"AFE_{well_id}_{diag['intervention']}.md")
     with st.container(border=True):
         st.markdown(afe_md)
 
-st.divider()
-st.caption("Engineering math is deterministic at every hop; the LLM is optional and confined to "
-           "narration. Source: github.com/diazaeric1-droid/pe-pipeline")
+    st.divider()
+    _back_to_overview()
+    st.caption("Engineering math is deterministic at every hop; the LLM is optional and confined to "
+               "narration. Source: github.com/diazaeric1-droid/pe-pipeline")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Navigation wiring
+# ════════════════════════════════════════════════════════════════════════════
+
+overview = st.Page(render_overview, title="Fleet Triage", icon="🚦", default=True)
+wells = [
+    st.Page(partial(render_well, wid), title=wid, url_path=wid, icon="🔬")
+    for wid in _well_ids()
+]
+# Map well_id → its Page object so the overview's quick-jump can switch_page to it.
+_well_pages = {wid: page for wid, page in zip(_well_ids(), wells)}
+
+nav_pages: dict = {"Fleet": [overview]}
+if wells:
+    nav_pages["Wells"] = wells
+st.navigation(nav_pages).run()
