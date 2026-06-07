@@ -78,9 +78,17 @@ def _ranked(price: float, nri: float) -> pd.DataFrame:
     return pc.rank_fleet(price_per_bbl=price, net_revenue_interest=nri)
 
 
-board = _ranked(price, nri)
-board = fr.enrich(board)  # shared Permian fleet identity (basin/area/formation/lift/hero) — additive
-alerts = pc.get_alerts(price_per_bbl=price)
+board_error = None
+try:
+    board = _ranked(price, nri)
+    board = fr.enrich(board)  # shared Permian fleet identity (basin/area/formation/lift/hero) — additive
+except Exception as _board_exc:  # noqa: BLE001 — never let the triage front page hard-crash
+    board_error = _board_exc
+    board = fr.enrich(pc._empty_rank_frame())
+try:
+    alerts = pc.get_alerts(price_per_bbl=price)
+except Exception:  # noqa: BLE001
+    alerts = []
 alerts_by_well = {a["well_id"]: a for a in alerts}
 
 
@@ -116,8 +124,15 @@ tab_triage, tab_detail = st.tabs(["🚦 Fleet triage", "🔬 Well detail"])
 # MODE A — FLEET TRIAGE (default)
 # ════════════════════════════════════════════════════════════════════════════
 with tab_triage:
+    if board_error is not None:
+        st.error(
+            "Fleet triage couldn't be computed in this deployment. The most common cause is the "
+            "bleeding-edge **Python 3.14** runtime + pandas 3.x stack — set this app's Python version "
+            "to **3.12** in Streamlit (⋮ → Settings → Python version) and reboot. Full error below:")
+        st.exception(board_error)
+        st.stop()
     if board.empty:
-        st.success("No wells in the fleet — nothing to triage. ✅")
+        st.info("No wells in the fleet — nothing to triage.")
         st.stop()
 
     fleet_n = len(board)
