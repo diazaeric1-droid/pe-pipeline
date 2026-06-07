@@ -153,6 +153,24 @@ def render_overview() -> None:
                "signature → the ESP Failure-Risk Agent scores 30-day risk + diagnoses the mode → the "
                "AFE Copilot drafts the authorization. Deterministic at every hop; runs with no API key.")
 
+    theme.how_to(
+        "- **This is the suite hub — the Fleet Triage Board.** It ranks the whole fleet by risked-NPV "
+        "opportunity so you know *where to look first*, then routes each well through the four-agent "
+        "chain: **Detect → Diagnose → Predict → Authorize**.\n"
+        "- **Detect** (Daily Production Digest): a deferment signature flags the well. "
+        "**Diagnose / Predict** (PE Copilot + ESP Failure-Risk Agent): the 30-day failure risk is scored "
+        "and the failure mode is classified. **Authorize** (AFE Copilot): the intervention's "
+        "Authorization for Expenditure is drafted.\n"
+        "- **Tune the economics** in the sidebar (realized oil price, working interest, NRI) — they drive "
+        "both the ranking and the AFE economics.\n"
+        "- **Read the board top-down:** higher Risked NPV = a bigger risk-weighted opportunity. Red bars / "
+        "high 30-day risk are the wells closest to failure. ★ marks a hero well with an end-to-end story.\n"
+        "- **Open any well** from the **Wells** section in the sidebar (or the quick-jump at the bottom) for "
+        "its full Detect → Predict → Authorize drill-down. Each sibling app — Digest, PE Copilot, ESP, "
+        "AFE — also runs standalone in the suite.",
+        title="How to Use This",
+    )
+
     if board_error is not None:
         st.error(
             "Fleet triage couldn't be computed in this deployment. The most common cause is the "
@@ -178,7 +196,7 @@ def render_overview() -> None:
                "well's positive risk-weighted net-to-operator NPV from its recommended intervention.")
 
     # ── Top wells by opportunity — horizontal bar ────────────────────────────
-    st.subheader("Top opportunities — risked NPV by well")
+    st.subheader("Top Opportunities — Risked NPV by Well")
     top = board.head(12).iloc[::-1]  # reverse so the biggest sits at the top of the bar chart
     colors = [theme.RED if r >= 0.5 else theme.AMBER for r in top["failure_risk_30d"]]
     bar = go.Figure(go.Bar(
@@ -201,7 +219,7 @@ def render_overview() -> None:
                 f"{_hero0.formation} · {_hero0.lift} lift. {_hero0.storyline}")
 
     # ── Ranked board table — formatted $ and % ───────────────────────────────
-    st.subheader("Fleet triage board")
+    st.subheader("Fleet Triage Board")
     show = board.copy()
     disp = pd.DataFrame({
         "Well": [f"★ {w}" if h else w for w, h in zip(show["well_id"], show["hero"])],
@@ -216,6 +234,12 @@ def render_overview() -> None:
         "NPV basis": show["npv_basis"].str.replace("_", " "),
     })
     st.dataframe(disp, width="stretch", hide_index=True)
+    theme.source_note(
+        "Triage score = the well's risked NPV: the net-to-operator NPV of its recommended intervention, "
+        "weighted by the ESP 30-day failure risk (probability the opportunity is real). Where the chain's "
+        "AFE intervention economics aren't available, a transparent fallback is used — deferred $/day × 365 "
+        "× failure risk — flagged in the 'NPV basis' column. Net economics apply the sidebar oil price and "
+        "NRI; the board is sorted descending so the biggest risk-weighted opportunity sits on top.")
     st.caption("Ranked descending by risked NPV (the opportunity score). Field / lift / lateral come "
                "from the shared **fleet registry** — every suite app references this same onshore Permian "
                "fleet (Midland + Delaware basins) by well ID; ★ marks a hero well with an end-to-end "
@@ -224,7 +248,7 @@ def render_overview() -> None:
                "**Wells** section in the sidebar for its detect → predict → authorize flow.")
 
     # ── Fleet funnel — detect → predict → authorize summary (Sankey) ─────────
-    st.subheader("Pipeline funnel — this run")
+    st.subheader("Pipeline Funnel — This Run")
     _n_fleet = fleet_n
     _n_alerts = len(alerts)
     _n_other = max(_n_fleet - _n_alerts, 0)
@@ -257,6 +281,8 @@ def render_overview() -> None:
     st.caption("Funnel for this run: the fleet narrows to ESP-related digest alerts; the highest-"
                "opportunity well is scored + diagnosed and an AFE is authorized — the detect → "
                "predict → authorize chain. Open any well's page (sidebar **Wells**) for its full flow.")
+
+    theme.references(["npv"])
 
     # ── Quick jump → switch directly to a well's drill-down page ─────────────
     st.divider()
