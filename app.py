@@ -294,6 +294,7 @@ def render_well(well_id: str) -> None:
     mh[1].metric("Lateral (ft)", f"{meta.lateral_length_ft:,}")
     mh[2].metric("Basin · formation", f"{meta.basin} · {meta.formation}")
     mh[3].metric("Peer group", meta.peer_group)
+    theme.well_cross_links("pipeline", well_id)
 
     alert = _alert_for(well_id)
     st.caption(f"Detect → predict → authorize flow for **{well_id}**. "
