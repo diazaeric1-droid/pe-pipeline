@@ -147,6 +147,7 @@ def render_overview() -> None:
     theme.header("PE Pipeline",
                  subtitle="fleet triage board → drill into any well's detect → predict → authorize",
                  chips=[("orchestrator", "info"), ("fleet triage", "eval")])
+    theme.data_badge("synthetic", "Modeled fleet chaining the suite's apps (Bakken-flavored synthetic; real NDIC production is wired in PE Copilot + Deferment IQ).")
     st.caption("The suite's front door: rank the WHOLE fleet by risked-NPV opportunity, then drill "
                "into any well's three-agent flow — the Daily Production Digest flags a pump-failure "
                "signature → the ESP Failure-Risk Agent scores 30-day risk + diagnoses the mode → the "
@@ -286,6 +287,7 @@ def render_well(well_id: str) -> None:
         chips=[("well detail", "info"),
                ("flagged" if flagged else "fleet-scan", "warn" if flagged else "info")],
     )
+    theme.data_badge("synthetic", "Modeled fleet chaining the suite's apps (Bakken-flavored synthetic; real NDIC production is wired in PE Copilot + Deferment IQ).")
     _back_to_overview()
 
     # Registry metadata header — lift / lateral / basin·formation at a glance.
