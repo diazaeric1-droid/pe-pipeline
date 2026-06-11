@@ -272,7 +272,7 @@ def rank_fleet(price_per_bbl: float = 70.0, net_revenue_interest: float = 0.80,
                 total_cost, incremental_bopd,
                 realized_price_per_bbl=price_per_bbl,
                 net_revenue_interest=net_revenue_interest, working_interest=1.0)
-            est_risked_npv = econ.net_npv_10pct_usd * risk
+            est_risked_npv = risk * (econ.net_npv_10pct_usd + total_cost) - total_cost
             npv_basis = "chain_economics"
         except Exception:  # noqa: BLE001
             pass
