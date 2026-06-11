@@ -253,6 +253,8 @@ def render_overview() -> None:
             "NPV basis": show["npv_basis"].str.replace("_", " "),
         })
         st.dataframe(disp, width="stretch", hide_index=True)
+        st.download_button("⬇ Download triage board (CSV)", data=action_board.to_csv(index=False),
+                           file_name="triage_board.csv", mime="text/csv")
     theme.source_note(
         "Triage score = the well's risked NPV: the net-to-operator NPV of its recommended intervention, "
         "weighted by the ESP 30-day failure risk (probability the opportunity is real). Where the chain's "
