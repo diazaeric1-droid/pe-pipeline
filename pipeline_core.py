@@ -186,6 +186,13 @@ def _score_fleet_risk(fleet: dict, model_path: Path) -> dict[str, float]:
 # board is still fully populated and deterministic. Conservative (low) by design.
 BASELINE_RISK_30D = 0.05
 
+# ---- no-action tier thresholds ----------------------------------------------
+# Wells below BOTH thresholds (or with zero deferment AND risk below the second)
+# are classified as "no_action" and carry opportunity_score = 0 so they don't
+# clutter the triage board. Tune here — no other file needs to change.
+_NO_ACTION_NPV_THRESHOLD = 10_000    # $ — below this, not worth flagging
+_NO_ACTION_RISK_THRESHOLD = 0.15     # 30-day failure probability
+
 
 def rank_fleet(price_per_bbl: float = 70.0, net_revenue_interest: float = 0.80,
                model_path: Path | None = None) -> "object":
@@ -276,6 +283,18 @@ def rank_fleet(price_per_bbl: float = 70.0, net_revenue_interest: float = 0.80,
             npv_basis = "chain_economics"
         except Exception:  # noqa: BLE001
             pass
+
+        # No-action tier: suppress wells that don't meet minimum thresholds so the
+        # triage board reflects what actually needs attention.
+        # Condition 1: low NPV AND low risk (not worth flagging at all).
+        # Condition 2: zero deferment AND risk is negligible (no alarm, no loss).
+        no_action = (
+            (est_risked_npv < _NO_ACTION_NPV_THRESHOLD and risk < _NO_ACTION_RISK_THRESHOLD)
+            or (deferred_bopd == 0.0 and risk < 0.10)
+        )
+        if no_action:
+            intervention = "no_action"
+            est_risked_npv = 0.0
 
         rows.append({
             "well_id": well_id,

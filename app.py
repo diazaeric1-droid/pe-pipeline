@@ -97,6 +97,11 @@ try:
 except Exception as _board_exc:  # noqa: BLE001 — never let the triage front page hard-crash
     board_error = _board_exc
     board = fr.enrich(pc._empty_rank_frame())
+
+# Split into actionable wells and no-action wells so the triage table stays clean.
+_no_action_mask = board["recommended_intervention"] == "no_action"
+action_board = board[~_no_action_mask].reset_index(drop=True)
+no_action_board = board[_no_action_mask].reset_index(drop=True)
 try:
     alerts = pc.get_alerts(price_per_bbl=price)
 except Exception:  # noqa: BLE001
@@ -207,7 +212,7 @@ def render_overview() -> None:
 
     # ── Top wells by opportunity — horizontal bar ────────────────────────────
     st.subheader("Top Opportunities — Risked NPV by Well")
-    top = board.head(12).iloc[::-1]  # reverse so the biggest sits at the top of the bar chart
+    top = action_board.head(12).iloc[::-1]  # reverse so the biggest sits at the top of the bar chart
     colors = [theme.RED if r >= 0.5 else theme.AMBER for r in top["failure_risk_30d"]]
     bar = go.Figure(go.Bar(
         x=top["est_risked_npv"], y=top["well_id"], orientation="h",
@@ -223,33 +228,39 @@ def render_overview() -> None:
     st.caption("Red = ESP 30-day failure risk ≥ 50%, amber below. Ranked by risk-weighted "
                "net-to-operator NPV of the recommended intervention.")
 
-    _hero0 = fr.get(str(board["well_id"].iloc[0]))
-    if _hero0.hero:
-        st.info(f"**★ {_hero0.well_id} — {_hero0.name}** · {_hero0.basin} Basin · "
-                f"{_hero0.formation} · {_hero0.lift} lift. {_hero0.storyline}")
+    if not action_board.empty:
+        _hero0 = fr.get(str(action_board["well_id"].iloc[0]))
+        if _hero0.hero:
+            st.info(f"**★ {_hero0.well_id} — {_hero0.name}** · {_hero0.basin} Basin · "
+                    f"{_hero0.formation} · {_hero0.lift} lift. {_hero0.storyline}")
 
     # ── Ranked board table — formatted $ and % ───────────────────────────────
     st.subheader("Fleet Triage Board")
-    show = board.copy()
-    disp = pd.DataFrame({
-        "Well": [f"★ {w}" if h else w for w, h in zip(show["well_id"], show["hero"])],
-        "Field": show["basin"] + " · " + show["formation"],
-        "Lift": show["lift"],
-        "Lateral (ft)": show["lateral_length_ft"].map(lambda x: f"{int(x):,}"),
-        "30-day risk": show["failure_risk_30d"].map(lambda x: f"{x:.0%}"),
-        "Deferred $/day": show["deferred_usd_per_day"].map(lambda x: f"${x:,.0f}"),
-        "Addressable BOPD": show["incremental_bopd"].map(lambda x: f"{x:,.0f}"),
-        "Intervention": show["recommended_intervention"].str.replace("_", " "),
-        "Risked NPV": show["est_risked_npv"].map(lambda x: f"${x:,.0f}"),
-        "NPV basis": show["npv_basis"].str.replace("_", " "),
-    })
-    st.dataframe(disp, width="stretch", hide_index=True)
+    show = action_board.copy()
+    if show.empty:
+        st.info("All wells are below the no-action thresholds — nothing requires attention right now.")
+    else:
+        disp = pd.DataFrame({
+            "Well": [f"★ {w}" if h else w for w, h in zip(show["well_id"], show["hero"])],
+            "Field": show["basin"] + " · " + show["formation"],
+            "Lift": show["lift"],
+            "Lateral (ft)": show["lateral_length_ft"].map(lambda x: f"{int(x):,}"),
+            "30-day risk": show["failure_risk_30d"].map(lambda x: f"{x:.0%}"),
+            "Deferred $/day": show["deferred_usd_per_day"].map(lambda x: f"${x:,.0f}"),
+            "Addressable BOPD": show["incremental_bopd"].map(lambda x: f"{x:,.0f}"),
+            "Intervention": show["recommended_intervention"].str.replace("_", " "),
+            "Risked NPV": show["est_risked_npv"].map(lambda x: f"${x:,.0f}"),
+            "NPV basis": show["npv_basis"].str.replace("_", " "),
+        })
+        st.dataframe(disp, width="stretch", hide_index=True)
     theme.source_note(
         "Triage score = the well's risked NPV: the net-to-operator NPV of its recommended intervention, "
         "weighted by the ESP 30-day failure risk (probability the opportunity is real). Where the chain's "
         "AFE intervention economics aren't available, a transparent fallback is used — deferred $/day × 365 "
         "× failure risk — flagged in the 'NPV basis' column. Net economics apply the sidebar oil price and "
-        "NRI; the board is sorted descending so the biggest risk-weighted opportunity sits on top.")
+        "NRI; the board is sorted descending so the biggest risk-weighted opportunity sits on top. "
+        "Wells below the no-action thresholds (risked NPV < $10k AND 30-day risk < 15%, or zero deferment "
+        "with risk < 10%) are excluded from this table and shown in the collapsed section below.")
     st.caption("Ranked descending by risked NPV (the opportunity score). Field / lift / lateral come "
                "from the shared **fleet registry** — every suite app references this same onshore Permian "
                "fleet (Midland + Delaware basins) by well ID; ★ marks a hero well with an end-to-end "
@@ -257,14 +268,40 @@ def render_overview() -> None:
                "economics or the transparent deferred-$/day × 365 × risk proxy. Open any well from the "
                "**Wells** section in the sidebar for its detect → predict → authorize flow.")
 
+    # ── No-action wells — collapsed section ──────────────────────────────────
+    _n_no_action = len(no_action_board)
+    if _n_no_action:
+        with st.expander(f"{_n_no_action} well{'s' if _n_no_action != 1 else ''} require no action"):
+            st.caption(
+                "These wells fall below the no-action thresholds "
+                "(risked NPV < $10k AND 30-day failure risk < 15%, OR zero deferment with risk < 10%). "
+                "They are excluded from the triage board above. Drill into any well's page for details."
+            )
+            st.dataframe(
+                no_action_board[["well_id", "failure_risk_30d", "deferred_bopd", "deferred_usd_per_day"]]
+                .rename(columns={
+                    "well_id": "Well",
+                    "failure_risk_30d": "30-day risk",
+                    "deferred_bopd": "Deferred BOPD",
+                    "deferred_usd_per_day": "Deferred $/day",
+                })
+                .assign(**{
+                    "30-day risk": no_action_board["failure_risk_30d"].map(lambda x: f"{x:.0%}"),
+                    "Deferred $/day": no_action_board["deferred_usd_per_day"].map(lambda x: f"${x:,.0f}"),
+                }),
+                width="stretch",
+                hide_index=True,
+            )
+
     # ── Fleet funnel — detect → predict → authorize summary (Sankey) ─────────
     st.subheader("Pipeline Funnel — This Run")
     _n_fleet = fleet_n
     _n_alerts = len(alerts)
     _n_other = max(_n_fleet - _n_alerts, 0)
-    _top_well = board["well_id"].iloc[0]
-    _top_risk = float(board["failure_risk_30d"].iloc[0])
-    _top_interv = str(board["recommended_intervention"].iloc[0]).replace("_", " ")
+    _top_src = action_board if not action_board.empty else board
+    _top_well = _top_src["well_id"].iloc[0]
+    _top_risk = float(_top_src["failure_risk_30d"].iloc[0])
+    _top_interv = str(_top_src["recommended_intervention"].iloc[0]).replace("_", " ")
 
     _nodes = [
         f"Fleet scanned · {_n_fleet} wells",                              # 0
