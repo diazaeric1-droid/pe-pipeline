@@ -11,10 +11,10 @@ license: mit
 
 # PE Pipeline — detect → predict → authorize
 
-[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://diazaeric1-pe-pipeline.hf.space)
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://pe-pipeline.streamlit.app)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Try it now → [diazaeric1-pe-pipeline.hf.space](https://diazaeric1-pe-pipeline.hf.space)** (public, no login)
+**Try it now → [pe-pipeline.streamlit.app](https://pe-pipeline.streamlit.app)** (public, no login)
 
 > The YAML block above is config for **Hugging Face Spaces** (genuinely public, no
 > login wall); GitHub just renders it as a small table. See "Deploy" below.
@@ -62,21 +62,7 @@ with `APPS_ROOT=/path/to/apps`.
 
 ## Deploy
 
-**Hugging Face Spaces (recommended — genuinely public, no login wall):**
-1. huggingface.co → **New Space** → SDK **Streamlit**, hardware **CPU basic** (free).
-2. Push this repo to the Space's git remote (the Space reads the YAML config at the top
-   of this README + `requirements.txt`; `app_file` is `app.py`):
-   ```bash
-   git remote add hf https://huggingface.co/spaces/<user>/pe-pipeline
-   git push hf main
-   ```
-3. It builds and serves at `https://<user>-pe-pipeline.hf.space` with **no sign-in**.
-   First load trains the ESP model (~30s).
-
-**Streamlit Community Cloud:** works the same (single self-contained repo, no submodule
-settings), but note that some accounts now force **viewer sign-in** even on "public"
-apps — if your `share.streamlit.io` app redirects visitors to `/-/auth/app`, that's the
-gate, and Hugging Face Spaces avoids it.
+Deployed on [Streamlit Community Cloud](https://streamlit.io/cloud) — auto-deploys on push to `main`.
 
 No secrets required — the chain is deterministic. (Add `ANTHROPIC_API_KEY` only if you
 extend the AFE stage to use the Claude drafter.)
