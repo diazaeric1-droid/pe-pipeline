@@ -197,6 +197,16 @@ _NO_ACTION_NPV_THRESHOLD = 10_000    # $ — below this, not worth flagging
 _NO_ACTION_RISK_THRESHOLD = 0.15     # 30-day failure probability
 
 
+def _lift_of(well_id: str) -> str | None:
+    """The well's artificial-lift type from the shared fleet registry (None if the
+    registry is unavailable — callers then fall back to the lift-agnostic mapping)."""
+    try:
+        import fleet_registry
+        return fleet_registry.get(str(well_id)).lift
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def rank_fleet(price_per_bbl: float = 70.0, net_revenue_interest: float = 0.80,
                model_path: Path | None = None) -> "object":
     """Rank the WHOLE bootstrapped fleet by risked-NPV opportunity (deterministic).
@@ -266,7 +276,10 @@ def rank_fleet(price_per_bbl: float = 70.0, net_revenue_interest: float = 0.80,
             mode, _evidence = esp_explainer.classify_failure_mode(feats)
         except Exception:  # noqa: BLE001
             mode = ""
-        intervention, frac = esp_handoff._map_mode(mode)
+        # Gate the priced intervention to one valid for the well's artificial-lift
+        # type (no ESP swap on a rod-pumped well, no gas-lift optimization on a well
+        # with no injection) — the recommendation a PE reads must be physical.
+        intervention, frac = esp_handoff._map_mode(mode, _lift_of(well_id))
 
         # The rate the intervention protects/restores (mirrors esp.handoff.diagnose):
         # the quantified deferral if present, else a mode-fraction of recent rate.

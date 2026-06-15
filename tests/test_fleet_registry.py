@@ -28,9 +28,11 @@ def test_get_is_deterministic_and_never_raises():
 
 
 def test_hero_metadata_matches_app_behavior():
-    # well_013 is the triage board's flagship ESP gas-interference well
+    # well_013 is the triage board's flagship gas-lift well with gas interference —
+    # a gas-lift-optimization candidate (its lift was corrected ESP→Gas lift so the
+    # recommended intervention is physically consistent with the lift type).
     w13 = fr.get("well_013")
-    assert w13.lift == "ESP" and w13.basin == "Midland" and w13.formation == "Wolfcamp A"
+    assert w13.lift == "Gas lift" and w13.basin == "Midland" and w13.formation == "Wolfcamp A"
 
 
 def test_enrich_is_additive_and_lossless():
